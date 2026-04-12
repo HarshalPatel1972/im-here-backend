@@ -3,11 +3,13 @@ package db
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
+	_ "embed"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+//go:embed migrations/001_init.sql
+var initSQL string
 
 func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 	poolConfig, err := pgxpool.ParseConfig(databaseURL)
@@ -32,12 +34,6 @@ func Connect(ctx context.Context, databaseURL string) (*pgxpool.Pool, error) {
 }
 
 func runMigrations(ctx context.Context, pool *pgxpool.Pool) error {
-	migrationsPath := filepath.Join("internal", "db", "migrations", "001_init.sql")
-	content, err := os.ReadFile(migrationsPath)
-	if err != nil {
-		return fmt.Errorf("unable to read migration file: %w", err)
-	}
-
-	_, err = pool.Exec(ctx, string(content))
+	_, err := pool.Exec(ctx, initSQL)
 	return err
 }
