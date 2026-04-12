@@ -9,6 +9,7 @@ import (
 
 	"github.com/guardian/im-here/internal/config"
 	"github.com/guardian/im-here/internal/db"
+	"github.com/guardian/im-here/internal/poller"
 	"github.com/joho/godotenv"
 )
 
@@ -39,6 +40,9 @@ func main() {
 	defer pool.Close()
 
 	log.Println("I'm Here is running")
+
+	p := poller.New(cfg, pool)
+	go p.Start(ctx)
 
 	// Wait for context cancellation
 	<-ctx.Done()
