@@ -1,7 +1,6 @@
 package notifier
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/smtp"
