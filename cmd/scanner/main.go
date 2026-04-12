@@ -9,6 +9,7 @@ import (
 
 	"github.com/guardian/im-here/internal/config"
 	"github.com/guardian/im-here/internal/db"
+	"github.com/guardian/im-here/internal/notifier"
 	"github.com/guardian/im-here/internal/poller"
 	"github.com/joho/godotenv"
 )
@@ -41,7 +42,8 @@ func main() {
 
 	log.Println("I'm Here is running")
 
-	p := poller.New(cfg, pool)
+	n := notifier.New(cfg, pool)
+	p := poller.New(cfg, pool, n)
 	go p.Start(ctx)
 
 	// Wait for context cancellation

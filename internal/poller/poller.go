@@ -14,21 +14,24 @@ import (
 	"github.com/guardian/im-here/internal/config"
 	"github.com/guardian/im-here/internal/detector"
 	"github.com/guardian/im-here/internal/models"
+	"github.com/guardian/im-here/internal/notifier"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type Poller struct {
 	cfg        *config.Config
 	db         *pgxpool.Pool
+	notifier   *notifier.Notifier
 	client     *http.Client
 	lastETag   string
 	pollInt    time.Duration
 }
 
-func New(cfg *config.Config, db *pgxpool.Pool) *Poller {
+func New(cfg *config.Config, db *pgxpool.Pool, notif *notifier.Notifier) *Poller {
 	return &Poller{
-		cfg:     cfg,
-		db:      db,
+		cfg:      cfg,
+		db:       db,
+		notifier: notif,
 		client:  &http.Client{Timeout: 10 * time.Second},
 		pollInt: time.Duration(cfg.PollIntervalSeconds) * time.Second,
 	}
@@ -251,4 +254,7 @@ func (p *Poller) persistFinding(ctx context.Context, f models.Finding) {
 	}
 
 	log.Printf("[FOUND] %s in %s/%s:%d commit:%s", f.SecretType, f.RepoFullName, f.FilePath, f.LineNumber, shaShort)
+
+	f.ID = id
+	go p.notifier.Notify(context.Background(), f)
 }
