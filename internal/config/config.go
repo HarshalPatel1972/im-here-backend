@@ -9,8 +9,10 @@ import (
 type Config struct {
 	GitHubToken         string
 	DatabaseURL         string
-	ResendAPIKey        string
-	ResendFrom          string
+	SMTPUser            string
+	SMTPPassword        string
+	SMTPHost            string
+	SMTPPort            string
 	PollIntervalSeconds int
 	LogLevel            string
 }
@@ -19,8 +21,10 @@ func Load() *Config {
 	cfg := &Config{
 		GitHubToken:         requireEnv("GITHUB_TOKEN"),
 		DatabaseURL:         requireEnv("DATABASE_URL"),
-		ResendAPIKey:        requireEnv("RESEND_API_KEY"),
-		ResendFrom:          requireEnv("RESEND_FROM"),
+		SMTPUser:            requireEnv("SMTP_USER"),
+		SMTPPassword:        requireEnv("SMTP_PASSWORD"),
+		SMTPHost:            getEnv("SMTP_HOST", "smtp.gmail.com"),
+		SMTPPort:            getEnv("SMTP_PORT", "587"),
 		PollIntervalSeconds: requireEnvInt("POLL_INTERVAL_SECONDS"),
 		LogLevel:            getEnv("LOG_LEVEL", "info"),
 	}

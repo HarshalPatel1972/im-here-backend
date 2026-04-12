@@ -3,11 +3,8 @@ package notifier
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
-	"time"
+	"net/smtp"
 
 	"github.com/guardian/im-here/internal/models"
 )
@@ -56,35 +53,19 @@ func (n *Notifier) sendEmail(ctx context.Context, f models.Finding) error {
 		shaShort,
 	)
 
-	payload := map[string]interface{}{
-		"from":    n.cfg.ResendFrom,
-		"to":      []string{f.CommitterEmail},
-		"subject": subject,
-		"text":    text,
-	}
-	payloadBytes, err := json.Marshal(payload)
+	// Combine headers and body
+	msg := []byte(fmt.Sprintf("To: %s\r\n"+
+		"From: I'm Here <%s>\r\n"+
+		"Subject: %s\r\n"+
+		"\r\n"+
+		"%s\r\n", f.CommitterEmail, n.cfg.SMTPUser, subject, text))
+
+	auth := smtp.PlainAuth("", n.cfg.SMTPUser, n.cfg.SMTPPassword, n.cfg.SMTPHost)
+	addr := fmt.Sprintf("%s:%s", n.cfg.SMTPHost, n.cfg.SMTPPort)
+
+	err := smtp.SendMail(addr, auth, n.cfg.SMTPUser, []string{f.CommitterEmail}, msg)
 	if err != nil {
-		return fmt.Errorf("failed to marshal resend payload: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.resend.com/emails", bytes.NewReader(payloadBytes))
-	if err != nil {
-		return fmt.Errorf("failed to create resend request: %w", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+n.cfg.ResendAPIKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("resend api request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		bodyBytes, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("resend api returned status %d: %s", resp.StatusCode, string(bodyBytes))
+		return fmt.Errorf("failed to send SMTP email: %w", err)
 	}
 
 	return nil
