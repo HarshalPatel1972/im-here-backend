@@ -1,0 +1,17 @@
+[Unit]
+Description=I'm Here — API Key Guardian
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/im-here
+EnvironmentFile=/home/ubuntu/im-here/.env
+ExecStart=/home/ubuntu/im-here/im-here
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
