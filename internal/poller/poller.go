@@ -4,27 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"log"
-	"net/http"
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/guardian/im-here/internal/config"
 	"github.com/guardian/im-here/internal/detector"
 	"github.com/guardian/im-here/internal/models"
 	"github.com/guardian/im-here/internal/notifier"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
 )
 
 type Poller struct {
-	cfg        *config.Config
-	db         *pgxpool.Pool
-	notifier   *notifier.Notifier
-	client     *http.Client
-	lastETag   string
-	pollInt    time.Duration
+	cfg      *config.Config
+	db       *pgxpool.Pool
+	notifier *notifier.Notifier
+	client   *http.Client
+	lastETag string
+	pollInt  time.Duration
 }
 
 func New(cfg *config.Config, db *pgxpool.Pool, notif *notifier.Notifier) *Poller {
@@ -32,14 +32,14 @@ func New(cfg *config.Config, db *pgxpool.Pool, notif *notifier.Notifier) *Poller
 		cfg:      cfg,
 		db:       db,
 		notifier: notif,
-		client:  &http.Client{Timeout: 10 * time.Second},
-		pollInt: time.Duration(cfg.PollIntervalSeconds) * time.Second,
+		client:   &http.Client{Timeout: 10 * time.Second},
+		pollInt:  time.Duration(cfg.PollIntervalSeconds) * time.Second,
 	}
 }
 
 func (p *Poller) Start(ctx context.Context) {
 	log.Println("Starting GitHub events poller...")
-	
+
 	// Create a ticker for polling based on dynamic poll interval
 	for {
 		select {
@@ -48,7 +48,7 @@ func (p *Poller) Start(ctx context.Context) {
 		default:
 			start := time.Now()
 			p.poll(ctx)
-			
+
 			// Wait for the remainder of the interval, enforcing minimum from GitHub
 			elapsed := time.Since(start)
 			if elapsed < p.pollInt {
@@ -161,7 +161,7 @@ func (p *Poller) processPushEvent(ctx context.Context, ev map[string]interface{}
 			continue
 		}
 		sha, _ := cMap["sha"].(string)
-		
+
 		author, _ := cMap["author"].(map[string]interface{})
 		email, _ := author["email"].(string)
 		name, _ := author["name"].(string)
@@ -171,12 +171,15 @@ func (p *Poller) processPushEvent(ctx context.Context, ev map[string]interface{}
 }
 
 func (p *Poller) fetchAndScanCommit(ctx context.Context, repo string, sha string, authorEmail string, authorName string) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", repo, sha)
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return
-	}
+	// Sanitize string to prevent path traversal in GitHub API
+	safeRepo := url.PathEscape(repo)
+	safeSha := url.PathEscape(sha)
 
+	urlStr := fmt.Sprintf("https://api.github.com/repos/%s/commits/%s", safeRepo, safeSha)
+	// Revert the path escape for the slash in repo name "owner/repo" to correctly format the endpoint
+	urlStr = strings.Replace(urlStr, "%2F", "/", 1)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", urlStr, nil)
 	req.Header.Set("Authorization", "Bearer "+p.cfg.GitHubToken)
 	req.Header.Set("Accept", "application/vnd.github.v3.diff")
 
@@ -196,16 +199,16 @@ func (p *Poller) fetchAndScanCommit(ctx context.Context, repo string, sha string
 	}
 	diffContent := string(diffBytes)
 
-	// Since the detector requires diff parsing per file, we'll pass the whole diff 
+	// Since the detector requires diff parsing per file, we'll pass the whole diff
 	// and extract a dummy file path, but a robust implementation parses diff hunks for file names.
 	// For this task's scope, we parse "diff --git a/file b/file"
-	
+
 	files := strings.Split(diffContent, "diff --git ")
 	for _, fDiff := range files {
 		if fDiff == "" {
 			continue
 		}
-		
+
 		// extract file path
 		firstLine := strings.SplitN(fDiff, "\n", 2)[0]
 		parts := strings.Split(firstLine, " ")
@@ -220,7 +223,7 @@ func (p *Poller) fetchAndScanCommit(ctx context.Context, repo string, sha string
 			f.CommitSHA = sha
 			f.CommitterEmail = authorEmail
 			f.CommitterName = authorName
-			
+
 			p.persistFinding(ctx, f)
 		}
 	}
