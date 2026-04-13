@@ -4,12 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/smtp"
-
-	"github.com/guardian/im-here/internal/models"
-)
-
-const emailTemplate = `Hey %s,
-
+        "strings"
 We noticed an exposed %s in a recent push to %s.
 
 File: %s · Line: %d · Commit: %s
@@ -42,30 +37,30 @@ func (n *Notifier) sendEmail(ctx context.Context, f models.Finding) error {
 		shaShort = shaShort[:7]
 	}
 
-	subject := fmt.Sprintf("I'm Here — we found something in %s", repoName)
-	text := fmt.Sprintf(emailTemplate,
-		f.CommitterName,
-		f.SecretType,
-		f.RepoFullName,
-		f.FilePath,
-		f.LineNumber,
-		shaShort,
-	)
+        // Sanitize headers to prevent CRLF injection
+        safeEmail := strings.ReplaceAll(strings.ReplaceAll(f.CommitterEmail, "\r", ""), "\n", "")
+        safeName := strings.ReplaceAll(strings.ReplaceAll(f.CommitterName, "\r", ""), "\n", "")
+        safeRepo := strings.ReplaceAll(strings.ReplaceAll(repoName, "\r", ""), "\n", "")
 
-	// Combine headers and body
-	msg := []byte(fmt.Sprintf("To: %s\r\n"+
-		"From: I'm Here <%s>\r\n"+
-		"Subject: %s\r\n"+
-		"\r\n"+
-		"%s\r\n", f.CommitterEmail, n.cfg.SMTPUser, subject, text))
+        subject := fmt.Sprintf("I'm Here — we found something in %s", safeRepo)
+        text := fmt.Sprintf(emailTemplate,
+                safeName,
+                f.SecretType,
+                f.RepoFullName,
+                f.FilePath,
+                f.LineNumber,
+                shaShort,
+        )
 
-	auth := smtp.PlainAuth("", n.cfg.SMTPUser, n.cfg.SMTPPassword, n.cfg.SMTPHost)
-	addr := fmt.Sprintf("%s:%s", n.cfg.SMTPHost, n.cfg.SMTPPort)
+        // Combine headers and body
+        msg := []byte(fmt.Sprintf("To: %s\r\n"+
+                "From: I'm Here <%s>\r\n"+
+                "Subject: %s\r\n"+
+                "\r\n"+
+                "%s\r\n", safeEmail, n.cfg.SMTPUser, subject, text))
 
-	err := smtp.SendMail(addr, auth, n.cfg.SMTPUser, []string{f.CommitterEmail}, msg)
-	if err != nil {
-		return fmt.Errorf("failed to send SMTP email: %w", err)
-	}
+        auth := smtp.PlainAuth("", n.cfg.SMTPUser, n.cfg.SMTPPassword, n.cfg.SMTPHost)
+        addr := fmt.Sprintf("%s:%s", n.cfg.SMTPHost, n.cfg.SMTPPort)
 
-	return nil
+        err := smtp.SendMail(addr, auth, n.cfg.SMTPUser, []string{safeEmail}, msg)
 }
