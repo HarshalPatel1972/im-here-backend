@@ -1,10 +1,16 @@
 package notifier
 
 import (
-	"context"
-	"fmt"
-	"net/smtp"
+        "context"
+        "fmt"
+        "net/smtp"
         "strings"
+
+        "github.com/guardian/im-here/internal/models"
+)
+
+const emailTemplate = `Hey %s,
+
 We noticed an exposed %s in a recent push to %s.
 
 File: %s · Line: %d · Commit: %s
@@ -28,14 +34,12 @@ A free, open-source guardian for developers.
 We never display your keys to anyone.`
 
 func (n *Notifier) sendEmail(ctx context.Context, f models.Finding) error {
-	repoName := f.RepoFullName
-	// repoName could be "owner/repo", email says "we found something in repo" 
-	// The prompt uses {repo_name} for subject and {repo_full_name} for body.
-
-	shaShort := f.CommitSHA
-	if len(shaShort) > 7 {
-		shaShort = shaShort[:7]
-	}
+        repoName := f.RepoFullName
+        
+        shaShort := f.CommitSHA
+        if len(shaShort) > 7 {
+                shaShort = shaShort[:7]
+        }
 
         // Sanitize headers to prevent CRLF injection
         safeEmail := strings.ReplaceAll(strings.ReplaceAll(f.CommitterEmail, "\r", ""), "\n", "")
@@ -63,4 +67,9 @@ func (n *Notifier) sendEmail(ctx context.Context, f models.Finding) error {
         addr := fmt.Sprintf("%s:%s", n.cfg.SMTPHost, n.cfg.SMTPPort)
 
         err := smtp.SendMail(addr, auth, n.cfg.SMTPUser, []string{safeEmail}, msg)
+        if err != nil {
+                return fmt.Errorf("failed to send SMTP email: %w", err)
+        }
+
+        return nil
 }
